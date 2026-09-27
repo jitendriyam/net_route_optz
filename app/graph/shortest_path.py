@@ -50,4 +50,3 @@ class Dijkstra(ShortestPathAlgorithm):
         path.append(source)
         path.reverse()
         return {"path": path, "total_latency": distances[destination]}
-    
