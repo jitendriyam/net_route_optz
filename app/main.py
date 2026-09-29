@@ -1,9 +1,16 @@
+import logging
+from time import perf_counter
+
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
 from app.api import edges, nodes, routes, test_data
 from app.api.health import router as health_router
-from app.exceptions import ConflictError, NotFoundError
+from app.exceptions.handlers import register_exception_handlers
+from app.logging_config import configure_logging
+
+configure_logging()
+logger = logging.getLogger("app.api")
 
 app = FastAPI(title="Network Route Optimization API", version="0.1.0")
 app.include_router(health_router, prefix="/api/v1")
@@ -11,6 +18,35 @@ app.include_router(nodes.router)
 app.include_router(edges.router)
 app.include_router(routes.router)
 app.include_router(test_data.router)
+register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    """Log the method, path, response status, and duration of every request."""
+    started_at = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (perf_counter() - started_at) * 1000
+        logger.error(
+            "request_failed method=%s path=%s duration_ms=%.2f",
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (perf_counter() - started_at) * 1000
+    log = logger.error if response.status_code >= 500 else logger.info
+    log(
+        "request_completed method=%s path=%s status=%s duration_ms=%.2f",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -43,13 +79,3 @@ def root() -> str:
     </main>
   </body>
 </html>"""
-
-
-@app.exception_handler(NotFoundError)
-async def not_found(_request: Request, error: NotFoundError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(error)})
-
-
-@app.exception_handler(ConflictError)
-async def conflict(_request: Request, error: ConflictError) -> JSONResponse:
-    return JSONResponse(status_code=409, content={"detail": str(error)})

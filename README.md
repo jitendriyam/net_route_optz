@@ -155,13 +155,25 @@ Return `{"status": "ok"}` when the application process is running.
   `404 Not Found`.
 - Duplicate node names and directed edges return `409 Conflict`.
 - Invalid request data returns `422 Unprocessable Entity`.
+- Database failures return a sanitized `503 Service Unavailable` response.
+- Unexpected failures return a sanitized `500 Internal Server Error` response;
+  internal exception details are written to server logs, not exposed to clients.
 - Only successful route calculations create history snapshots.
+
+## Logging
+
+The API logs every request with its HTTP method, path, response status, and
+execution duration. Domain errors are logged at warning level, while database
+and unexpected errors include tracebacks at error level.
+
+Set `LOG_LEVEL` to control application verbosity. The default and Docker Compose
+value is `INFO`.
 
 ## Architecture
 
 `app/api/nodes.py`, `app/api/edges.py`, `app/api/routes.py`, and
 `app/api/test_data.py` contain the HTTP handlers. `app/main.py` registers the
-routers and exception handlers.
+routers, request-logging middleware, and exception handlers.
 
 The API layer validates HTTP input and calls `app/services`. Services enforce
 business rules, coordinate repositories, and own transaction commits.
